@@ -1,0 +1,202 @@
+[
+ {
+  "id": 21147,
+  "title": "Evitec Oy, Lahti",
+  "industries": [
+   390
+  ],
+  "municipalities": [
+   400
+  ],
+  "association_numbers": [
+   394,
+   388
+  ],
+  "street_address_1": "Aleksanterinkatu 18 A 5krs.",
+  "street_address_2": "",
+  "postal_code": "15140",
+  "city": "LAHTI",
+  "website_url": null,
+  "type": "toimipaikka"
+ },
+ {
+  "id": 21151,
+  "title": "Evitec Oy, Lappeenranta",
+  "industries": [
+   390
+  ],
+  "municipalities": [
+   397
+  ],
+  "association_numbers": [
+   394,
+   388
+  ],
+  "street_address_1": "Hietakallionkatu 2",
+  "street_address_2": "",
+  "postal_code": "53850",
+  "city": "LAPPEENRANTA",
+  "website_url": null,
+  "type": "toimipaikka"
+ },
+ {
+  "id": 21149,
+  "title": "Evitec Oy, Pori",
+  "industries": [
+   390
+  ],
+  "municipalities": [
+   429
+  ],
+  "association_numbers": [
+   394,
+   388
+  ],
+  "street_address_1": "Pohjoisranta 11 D",
+  "street_address_2": "",
+  "postal_code": "28100",
+  "city": "PORI",
+  "website_url": null,
+  "type": "toimipaikka"
+ },
+ {
+  "id": 21145,
+  "title": "Evitec Oy, Tampere",
+  "industries": [
+   390
+  ],
+  "municipalities": [
+   386
+  ],
+  "association_numbers": [
+   394,
+   388
+  ],
+  "street_address_1": "Kalevantie 2",
+  "street_address_2": "",
+  "postal_code": "33100",
+  "city": "TAMPERE",
+  "website_url": null,
+  "type": "toimipaikka"
+ },
+ {
+  "id": 19917,
+  "title": "Prog-It Oy",
+  "industries": [
+   390
+  ],
+  "municipalities": [
+   389
+  ],
+  "association_numbers": [
+   394,
+   388
+  ],
+  "street_address_1": "Rajatorpantie 8 A",
+  "street_address_2": "",
+  "postal_code": "01600",
+  "city": "VANTAA",
+  "website_url": "www.prog-it.net",
+  "type": "päätoimipaikka"
+ },
+ {
+  "id": 18047,
+  "title": "Silo AI Oy",
+  "industries": [
+   390
+  ],
+  "municipalities": [
+   389
+  ],
+  "association_numbers": [
+   394,
+   388
+  ],
+  "street_address_1": "Lapinlahdenkatu 1 C",
+  "street_address_2": "",
+  "postal_code": "00180",
+  "city": "HELSINKI",
+  "website_url": "https://www.amd.com/",
+  "type": "päätoimipaikka"
+ },
+ {
+  "id": 21223,
+  "title": "Silo Al Oy Jyväskylä",
+  "industries": [
+   390
+  ],
+  "municipalities": [
+   418
+  ],
+  "association_numbers": [
+   394,
+   388
+  ],
+  "street_address_1": "Kauppakatu 39",
+  "street_address_2": "",
+  "postal_code": "40100",
+  "city": "JYVÄSKYLÄ",
+  "website_url": null,
+  "type": "toimipaikka"
+ },
+ {
+  "id": 21227,
+  "title": "Silo Al Oy Tampere",
+  "industries": [
+   390
+  ],
+  "municipalities": [
+   386
+  ],
+  "association_numbers": [
+   394,
+   388
+  ],
+  "street_address_1": "Peltokatu 26",
+  "street_address_2": "",
+  "postal_code": "33100",
+  "city": "TAMPERE",
+  "website_url": null,
+  "type": "toimipaikka"
+ },
+ {
+  "id": 21229,
+  "title": "Silo Al Oy Turku",
+  "industries": [
+   390
+  ],
+  "municipalities": [
+   407
+  ],
+  "association_numbers": [
+   394,
+   388
+  ],
+  "street_address_1": "Tykistökatu 4 D",
+  "street_address_2": "",
+  "postal_code": "20520",
+  "city": "TURKU",
+  "website_url": null,
+  "type": "toimipaikka"
+ },
+ {
+  "id": 21121,
+  "title": "TecnoSmart Oy, Helsinki",
+  "industries": [
+   390
+  ],
+  "municipalities": [
+   389
+  ],
+  "association_numbers": [
+   394,
+   388
+  ],
+  "street_address_1": "Huopalahdentie 24 A",
+  "street_address_2": "",
+  "postal_code": "00350",
+  "city": "HELSINKI",
+  "website_url": null,
+  "type": "toimipaikka"
+ }
+]
