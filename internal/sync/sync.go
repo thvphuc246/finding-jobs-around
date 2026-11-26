@@ -7,18 +7,24 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/thvphuc246/finding-jobs-around/internal/careers"
 	"github.com/thvphuc246/finding-jobs-around/internal/geocode"
 	"github.com/thvphuc246/finding-jobs-around/internal/members"
 	"github.com/thvphuc246/finding-jobs-around/internal/store"
 )
 
 type Report struct {
-	Companies     int
-	Locations     int
-	NewlyInactive int
-	Precise       int
-	Approximate   int
-	NotFound      int
+	Companies       int
+	Locations       int
+	NewlyInactive   int
+	Precise         int
+	Approximate     int
+	NotFound        int
+	CSVOverrides    int
+	DetectedFound   int
+	DetectedNone    int
+	DetectedBlocked int
+	Unreachable     int
 }
 
 type Geocoder interface {
@@ -26,15 +32,26 @@ type Geocoder interface {
 }
 
 type Deps struct {
-	Store    *store.Store
-	Fetch    func(ctx context.Context) ([]members.Row, error)
-	Geocoder Geocoder
-	Now      time.Time
-	Log      *slog.Logger
+	Store       *store.Store
+	Fetch       func(ctx context.Context) ([]members.Row, error)
+	Geocoder    Geocoder
+	Careers     *careers.Client
+	CareersPath string
+	Now         time.Time
+	Log         *slog.Logger
 }
 
 func Run(ctx context.Context, deps Deps) (Report, error) {
 	var report Report
+
+	careersPath := deps.CareersPath
+	if careersPath == "" {
+		careersPath = "careers.csv"
+	}
+	overrides, err := careers.Load(careersPath)
+	if err != nil {
+		return report, err
+	}
 
 	if err := deps.Store.InitSchema(ctx); err != nil {
 		return report, err
@@ -83,6 +100,50 @@ func Run(ctx context.Context, deps Deps) (Report, error) {
 				return report, err
 			}
 			report.Precise++
+		}
+	}
+
+	applied := make(map[int64]careers.Override, len(overrides))
+	known := make(map[int64]bool, len(companies))
+	for _, company := range companies {
+		known[company.ID] = true
+	}
+	for id, override := range overrides {
+		if !known[id] {
+			deps.Log.Warn("careers override for unknown company", "company_id", id)
+			continue
+		}
+		applied[id] = override
+	}
+	report.CSVOverrides = len(applied)
+	if err := deps.Store.ApplyCareersOverrides(ctx, applied); err != nil {
+		return report, err
+	}
+
+	pendingCareers, err := deps.Store.PendingCareers(ctx)
+	if err != nil {
+		return report, err
+	}
+	for _, company := range pendingCareers {
+		result, err := careers.Detect(ctx, deps.Careers, company.WebsiteURL)
+		if err != nil {
+			report.Unreachable++
+			deps.Log.Warn("careers detection failed", "company_id", company.ID, "website", company.WebsiteURL, "error", err)
+			continue
+		}
+
+		var careersURL *string
+		switch result.Status {
+		case careers.Found:
+			careersURL = &result.URL
+			report.DetectedFound++
+		case careers.None:
+			report.DetectedNone++
+		case careers.Blocked:
+			report.DetectedBlocked++
+		}
+		if err := deps.Store.SaveDetectedCareers(ctx, company.ID, careersURL, company.WebsiteURL); err != nil {
+			return report, err
 		}
 	}
 

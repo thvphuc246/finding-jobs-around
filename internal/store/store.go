@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/thvphuc246/finding-jobs-around/internal/careers"
 	"github.com/thvphuc246/finding-jobs-around/internal/geocode"
 	"github.com/thvphuc246/finding-jobs-around/internal/members"
 )
@@ -24,6 +25,11 @@ type PendingLocation struct {
 	Street     string
 	PostalCode string
 	City       string
+}
+
+type PendingCareers struct {
+	ID         int64
+	WebsiteURL string
 }
 
 func (p PendingLocation) AddressKey() string {
@@ -152,6 +158,83 @@ WHERE id = $1`, id, lat, lon, approximate, addressKey)
 	}
 	if result.RowsAffected() == 0 {
 		return fmt.Errorf("save geocode for location %d: no such location", id)
+	}
+	return nil
+}
+
+func (s *Store) ApplyCareersOverrides(ctx context.Context, overrides map[int64]careers.Override) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin careers override: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	ids := make([]int64, 0, len(overrides))
+	for id, override := range overrides {
+		ids = append(ids, id)
+		var careersURL *string
+		if override.URL != "" {
+			careersURL = &override.URL
+		}
+		if _, err := tx.Exec(ctx, `
+UPDATE companies
+SET careers_url = $2, careers_source = 'csv'
+WHERE id = $1`, id, careersURL); err != nil {
+			return fmt.Errorf("apply careers override for company %d: %w", id, err)
+		}
+	}
+
+	if _, err := tx.Exec(ctx, `
+UPDATE companies
+SET careers_url = NULL, careers_source = NULL, careers_checked_website = NULL
+WHERE careers_source = 'csv' AND id <> ALL($1)`, ids); err != nil {
+		return fmt.Errorf("clear removed careers overrides: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit careers override: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) PendingCareers(ctx context.Context) ([]PendingCareers, error) {
+	rows, err := s.pool.Query(ctx, `
+SELECT id, website_url
+FROM companies
+WHERE inactive_at IS NULL
+  AND careers_source IS DISTINCT FROM 'csv'
+  AND website_url IS NOT NULL
+  AND careers_checked_website IS DISTINCT FROM website_url
+ORDER BY id`)
+	if err != nil {
+		return nil, fmt.Errorf("list pending careers: %w", err)
+	}
+	defer rows.Close()
+
+	var pending []PendingCareers
+	for rows.Next() {
+		var company PendingCareers
+		if err := rows.Scan(&company.ID, &company.WebsiteURL); err != nil {
+			return nil, fmt.Errorf("read pending careers: %w", err)
+		}
+		pending = append(pending, company)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list pending careers: %w", err)
+	}
+	return pending, nil
+}
+
+func (s *Store) SaveDetectedCareers(ctx context.Context, id int64, careersURL *string, checkedWebsite string) error {
+	result, err := s.pool.Exec(ctx, `
+UPDATE companies
+SET careers_url = $2, careers_source = 'detected', careers_checked_website = $3
+WHERE id = $1`, id, careersURL, checkedWebsite)
+	if err != nil {
+		return fmt.Errorf("save careers for company %d: %w", id, err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("save careers for company %d: no such company", id)
 	}
 	return nil
 }
