@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/thvphuc246/finding-jobs-around/internal/careers"
 	"github.com/thvphuc246/finding-jobs-around/internal/geocode"
 	"github.com/thvphuc246/finding-jobs-around/internal/members"
 	"github.com/thvphuc246/finding-jobs-around/internal/store"
@@ -17,8 +18,9 @@ import (
 const (
 	memberListURL = "https://teknologiateollisuus.fi/jasenille/wp-admin/admin-ajax.php?action=em_member_feed&association_numbers=394&industries[]=390"
 	geocodingURL  = "https://api.digitransit.fi/geocoding/v1/search"
+	careersPath   = "careers.csv"
 	httpTimeout   = 30 * time.Second
-	geocodeDelay  = time.Second
+	requestDelay  = time.Second
 )
 
 func main() {
@@ -51,7 +53,11 @@ func run(log *slog.Logger) error {
 		BaseURL: geocodingURL,
 		Key:     apiKey,
 		HTTP:    httpClient,
-		Delay:   geocodeDelay,
+		Delay:   requestDelay,
+	}
+	careersClient := &careers.Client{
+		HTTP:  httpClient,
+		Delay: requestDelay,
 	}
 
 	report, err := syncpkg.Run(ctx, syncpkg.Deps{
@@ -59,9 +65,11 @@ func run(log *slog.Logger) error {
 		Fetch: func(ctx context.Context) ([]members.Row, error) {
 			return members.Fetch(ctx, httpClient, memberListURL)
 		},
-		Geocoder: geocoder,
-		Now:      time.Now(),
-		Log:      log,
+		Geocoder:    geocoder,
+		Careers:     careersClient,
+		CareersPath: careersPath,
+		Now:         time.Now(),
+		Log:         log,
 	})
 	if err != nil {
 		return err
@@ -74,6 +82,11 @@ func run(log *slog.Logger) error {
 		"precise", report.Precise,
 		"approximate", report.Approximate,
 		"not_found", report.NotFound,
+		"csv_overrides", report.CSVOverrides,
+		"detected_found", report.DetectedFound,
+		"detected_none", report.DetectedNone,
+		"detected_blocked", report.DetectedBlocked,
+		"unreachable", report.Unreachable,
 	)
 	return nil
 }

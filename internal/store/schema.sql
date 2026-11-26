@@ -21,3 +21,8 @@ CREATE TABLE IF NOT EXISTS locations (
     updated_at timestamptz NOT NULL,
     CHECK ((lat IS NULL) = (lon IS NULL))
 );
+
+ALTER TABLE companies
+    ADD COLUMN IF NOT EXISTS careers_url text,
+    ADD COLUMN IF NOT EXISTS careers_source text CHECK (careers_source IN ('csv', 'detected')),
+    ADD COLUMN IF NOT EXISTS careers_checked_website text;
