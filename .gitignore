@@ -1,0 +1,15 @@
+node_modules
+dist
+.idea
+.env*
+!.env.example
+.vercel
+.agents
+.claude
+/AGENTS.md
+/CLAUDE.md
+/CONTEXT.md
+/FINDINGS.md
+/NOTES.md
+/plans
+/skills-lock.json
