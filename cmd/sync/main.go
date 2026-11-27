@@ -12,6 +12,7 @@ import (
 	"github.com/thvphuc246/finding-jobs-around/internal/members"
 	"github.com/thvphuc246/finding-jobs-around/internal/store"
 	syncpkg "github.com/thvphuc246/finding-jobs-around/internal/sync"
+	"github.com/thvphuc246/finding-jobs-around/internal/teamtailor"
 	"github.com/thvphuc246/finding-jobs-around/internal/useragent"
 )
 
@@ -59,6 +60,10 @@ func run(log *slog.Logger) error {
 		HTTP:  httpClient,
 		Delay: requestDelay,
 	}
+	teamtailorClient := &teamtailor.Client{
+		HTTP:  httpClient,
+		Delay: requestDelay,
+	}
 
 	report, err := syncpkg.Run(ctx, syncpkg.Deps{
 		Store: db,
@@ -68,6 +73,7 @@ func run(log *slog.Logger) error {
 		Geocoder:    geocoder,
 		Careers:     careersClient,
 		CareersPath: careersPath,
+		Teamtailor:  teamtailorClient,
 		Now:         time.Now(),
 		Log:         log,
 	})
@@ -87,6 +93,11 @@ func run(log *slog.Logger) error {
 		"detected_none", report.DetectedNone,
 		"detected_blocked", report.DetectedBlocked,
 		"unreachable", report.Unreachable,
+		"feeds_found", report.FeedsFound,
+		"feeds_failed", report.FeedsFailed,
+		"jobs_open", report.JobsOpen,
+		"opened_today", report.OpenedToday,
+		"closed_today", report.ClosedToday,
 	)
 	return nil
 }

@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:tt="https://teamtailor.com/locations">
+  <channel>
+    <title>Acme careers</title>
+    <item>
+      <title>Senior Backend Developer</title>
+      <link>https://acme.teamtailor.com/jobs/11111111-1111-1111-1111-111111111111</link>
+      <guid>11111111-1111-1111-1111-111111111111</guid>
+      <pubDate>Tue, 24 Nov 2026 10:00:00 +0200</pubDate>
+      <remoteStatus>hybrid</remoteStatus>
+      <tt:department>Engineering</tt:department>
+      <tt:role>Developer</tt:role>
+      <tt:locations>
+        <tt:location>
+          <tt:name>Helsinki Office</tt:name>
+          <tt:address>Testikatu 1</tt:address>
+          <tt:zip>00100</tt:zip>
+          <tt:city>Helsinki</tt:city>
+          <tt:country>Finland</tt:country>
+        </tt:location>
+        <tt:location>
+          <tt:name>Turku Office</tt:name>
+          <tt:address>Turkkatu 2</tt:address>
+          <tt:zip>20100</tt:zip>
+          <tt:city>Turku</tt:city>
+          <tt:country>Finland</tt:country>
+        </tt:location>
+        <tt:location>
+          <tt:name>Stockholm</tt:name>
+          <tt:address>Sveavägen 1</tt:address>
+          <tt:zip>11122</tt:zip>
+          <tt:city></tt:city>
+          <tt:country>Sweden</tt:country>
+        </tt:location>
+      </tt:locations>
+    </item>
+    <item>
+      <title>OPEN APPLICATION</title>
+      <link>https://acme.teamtailor.com/jobs/22222222-2222-2222-2222-222222222222</link>
+      <guid>22222222-2222-2222-2222-222222222222</guid>
+      <pubDate>Wed, 25 Nov 2026 09:30:00 +0200</pubDate>
+      <remoteStatus>none</remoteStatus>
+      <tt:locations>
+        <tt:location>
+          <tt:name>Espoo</tt:name>
+          <tt:address>Espoonkatu 3</tt:address>
+          <tt:zip>02100</tt:zip>
+          <tt:city></tt:city>
+          <tt:country>Finland</tt:country>
+        </tt:location>
+      </tt:locations>
+    </item>
+    <item>
+      <title>Avoin hakemus — Data</title>
+      <link>https://acme.teamtailor.com/jobs/33333333-3333-3333-3333-333333333333</link>
+      <guid>33333333-3333-3333-3333-333333333333</guid>
+      <pubDate>Mon, 23 Nov 2026 08:00:00 +0200</pubDate>
+      <remoteStatus>none</remoteStatus>
+      <tt:locations>
+        <tt:location>
+          <tt:name>Oulu</tt:name>
+          <tt:address>Oulunkatu 4</tt:address>
+          <tt:zip>90100</tt:zip>
+          <tt:city>Oulu</tt:city>
+          <tt:country>Finland</tt:country>
+        </tt:location>
+      </tt:locations>
+    </item>
+    <item>
+      <title>Application Developer</title>
+      <link>https://acme.teamtailor.com/jobs/44444444-4444-4444-4444-444444444444</link>
+      <guid>44444444-4444-4444-4444-444444444444</guid>
+      <pubDate>Mon, 23 Nov 2026 07:00:00 +0200</pubDate>
+      <remoteStatus>none</remoteStatus>
+      <tt:locations>
+        <tt:location>
+          <tt:name>Tampere</tt:name>
+          <tt:address>Tampereonkatu 5</tt:address>
+          <tt:zip>33100</tt:zip>
+          <tt:city>Tampere</tt:city>
+          <tt:country>Finland</tt:country>
+        </tt:location>
+      </tt:locations>
+    </item>
+    <item>
+      <title>Öppen ansökan</title>
+      <link>https://acme.teamtailor.com/jobs/55555555-5555-5555-5555-555555555555</link>
+      <guid>55555555-5555-5555-5555-555555555555</guid>
+      <pubDate>Mon, 23 Nov 2026 06:00:00 +0200</pubDate>
+      <remoteStatus>remote</remoteStatus>
+      <tt:locations>
+        <tt:location>
+          <tt:name>Helsinki</tt:name>
+          <tt:address>Testikatu 1</tt:address>
+          <tt:zip>00100</tt:zip>
+          <tt:city>Helsinki</tt:city>
+          <tt:country>Finland</tt:country>
+        </tt:location>
+      </tt:locations>
+    </item>
+    <item>
+      <title>Open application for Druid</title>
+      <link>https://acme.teamtailor.com/jobs/66666666-6666-6666-6666-666666666666</link>
+      <guid>66666666-6666-6666-6666-666666666666</guid>
+      <pubDate>Mon, 23 Nov 2026 05:00:00 +0200</pubDate>
+      <remoteStatus>none</remoteStatus>
+      <tt:locations>
+        <tt:location>
+          <tt:name>Helsinki</tt:name>
+          <tt:address>Testikatu 1</tt:address>
+          <tt:zip>00100</tt:zip>
+          <tt:city>Helsinki</tt:city>
+          <tt:country>Finland</tt:country>
+        </tt:location>
+      </tt:locations>
+    </item>
+  </channel>
+</rss>
