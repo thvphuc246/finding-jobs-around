@@ -4,20 +4,16 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
 	"time"
 
-	"github.com/temoto/robotstxt"
 	"golang.org/x/net/html"
 
 	"github.com/thvphuc246/finding-jobs-around/internal/useragent"
 )
-
-const maxPageBytes = 1 << 20
 
 var hiringPlatforms = []string{
 	"teamtailor.com",
@@ -107,17 +103,22 @@ func Detect(ctx context.Context, client *Client, websiteURL string) (Result, err
 		return Result{}, err
 	}
 
-	robots, err := client.robots(ctx, site)
+	fetcher := &useragent.Fetcher{HTTP: client.HTTP, Delay: client.Delay}
+
+	allowed, err := fetcher.RobotsAllowed(ctx, site)
 	if err != nil {
 		return Result{}, err
 	}
-	if !robots.FindGroup(useragent.Agent).Test(site.RequestURI()) {
+	if !allowed {
 		return Result{Status: Blocked}, nil
 	}
 
-	final, body, err := client.homepage(ctx, site.String())
+	status, final, body, err := fetcher.Get(ctx, site.String(), useragent.MaxPageBytes)
 	if err != nil {
-		return Result{}, err
+		return Result{}, fmt.Errorf("fetch homepage: %w", err)
+	}
+	if status < http.StatusOK || status >= http.StatusMultipleChoices {
+		return Result{}, fmt.Errorf("homepage returned HTTP %d", status)
 	}
 
 	links, err := parseLinks(final, body)
@@ -154,56 +155,6 @@ func siteURL(raw string) (*url.URL, error) {
 		return nil, fmt.Errorf("website URL %q has no host", raw)
 	}
 	return site, nil
-}
-
-func (c *Client) robots(ctx context.Context, site *url.URL) (*robotstxt.RobotsData, error) {
-	robotsURL := &url.URL{Scheme: site.Scheme, Host: site.Host, Path: "/robots.txt"}
-	status, _, body, err := c.fetch(ctx, robotsURL.String())
-	if err != nil {
-		return nil, fmt.Errorf("fetch robots.txt: %w", err)
-	}
-	robots, err := robotstxt.FromStatusAndBytes(status, body)
-	if err != nil {
-		return nil, fmt.Errorf("parse robots.txt: %w", err)
-	}
-	return robots, nil
-}
-
-func (c *Client) homepage(ctx context.Context, rawURL string) (*url.URL, []byte, error) {
-	status, final, body, err := c.fetch(ctx, rawURL)
-	if err != nil {
-		return nil, nil, fmt.Errorf("fetch homepage: %w", err)
-	}
-	if status < http.StatusOK || status >= http.StatusMultipleChoices {
-		return nil, nil, fmt.Errorf("homepage returned HTTP %d", status)
-	}
-	return final, body, nil
-}
-
-func (c *Client) fetch(ctx context.Context, rawURL string) (int, *url.URL, []byte, error) {
-	if c.Delay > 0 {
-		select {
-		case <-ctx.Done():
-			return 0, nil, nil, ctx.Err()
-		case <-time.After(c.Delay):
-		}
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-	if err != nil {
-		return 0, nil, nil, err
-	}
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return 0, nil, nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxPageBytes))
-	if err != nil {
-		return 0, nil, nil, err
-	}
-	return resp.StatusCode, resp.Request.URL, body, nil
 }
 
 func parseLinks(base *url.URL, body []byte) ([]link, error) {

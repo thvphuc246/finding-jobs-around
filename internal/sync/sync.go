@@ -11,6 +11,7 @@ import (
 	"github.com/thvphuc246/finding-jobs-around/internal/geocode"
 	"github.com/thvphuc246/finding-jobs-around/internal/members"
 	"github.com/thvphuc246/finding-jobs-around/internal/store"
+	"github.com/thvphuc246/finding-jobs-around/internal/teamtailor"
 )
 
 type Report struct {
@@ -25,6 +26,11 @@ type Report struct {
 	DetectedNone    int
 	DetectedBlocked int
 	Unreachable     int
+	FeedsFound      int
+	FeedsFailed     int
+	JobsOpen        int
+	OpenedToday     int
+	ClosedToday     int
 }
 
 type Geocoder interface {
@@ -37,6 +43,7 @@ type Deps struct {
 	Geocoder    Geocoder
 	Careers     *careers.Client
 	CareersPath string
+	Teamtailor  *teamtailor.Client
 	Now         time.Time
 	Log         *slog.Logger
 }
@@ -145,6 +152,49 @@ func Run(ctx context.Context, deps Deps) (Report, error) {
 		if err := deps.Store.SaveDetectedCareers(ctx, company.ID, careersURL, company.WebsiteURL); err != nil {
 			return report, err
 		}
+	}
+
+	pendingFeeds, err := deps.Store.PendingFeedDiscovery(ctx)
+	if err != nil {
+		return report, err
+	}
+	for _, company := range pendingFeeds {
+		feedURL, found, err := teamtailor.Discover(ctx, deps.Teamtailor, company.CareersURL)
+		if err != nil {
+			report.FeedsFailed++
+			deps.Log.Warn("feed discovery failed", "company_id", company.ID, "careers_url", company.CareersURL, "error", err)
+			continue
+		}
+
+		var feed *string
+		if found {
+			feed = &feedURL
+			report.FeedsFound++
+		}
+		if err := deps.Store.SaveFeedDiscovery(ctx, company.ID, feed, company.CareersURL); err != nil {
+			return report, err
+		}
+	}
+
+	feedCompanies, err := deps.Store.FeedCompanies(ctx)
+	if err != nil {
+		return report, err
+	}
+	for _, company := range feedCompanies {
+		jobs, err := deps.Teamtailor.Fetch(ctx, company.FeedURL)
+		if err != nil {
+			report.FeedsFailed++
+			deps.Log.Warn("feed fetch failed", "company_id", company.ID, "feed", company.FeedURL, "error", err)
+			continue
+		}
+
+		stats, err := deps.Store.SaveJobs(ctx, company.ID, jobs, deps.Now)
+		if err != nil {
+			return report, err
+		}
+		report.JobsOpen += stats.Open
+		report.OpenedToday += stats.Opened
+		report.ClosedToday += stats.Closed
 	}
 
 	return report, nil

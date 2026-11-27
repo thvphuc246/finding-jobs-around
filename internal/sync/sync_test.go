@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"github.com/thvphuc246/finding-jobs-around/internal/geocode"
 	"github.com/thvphuc246/finding-jobs-around/internal/members"
 	"github.com/thvphuc246/finding-jobs-around/internal/store"
+	"github.com/thvphuc246/finding-jobs-around/internal/teamtailor"
 	"github.com/thvphuc246/finding-jobs-around/internal/useragent"
 )
 
@@ -347,6 +349,402 @@ func TestRunCareersRetriesUnreachable(t *testing.T) {
 	}
 }
 
+func TestRunSavesJobs(t *testing.T) {
+	db, conn := testDatabase(t)
+	geocoder := &fakeGeocoder{}
+	feed := jobsFeed(
+		jobItem{guid: "job-a", title: "Engineer", city: "TURKU", country: "Finland", remote: "hybrid"},
+		jobItem{guid: "job-b", title: "Designer", city: "HELSINKI", country: "Finland"},
+	)
+	site := newFeedSite(t, feed)
+	rows := companyRows(site.server.URL)
+	csv := careersURLRow(t, site)
+
+	deps := testDepsWithTeamtailor(t, db, geocoder, rows, csv, localTeamtailor())
+	deps.Now = time.Date(2026, 11, 26, 3, 0, 0, 0, time.UTC)
+
+	report, err := Run(context.Background(), deps)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if report.FeedsFound != 1 || report.FeedsFailed != 0 {
+		t.Fatalf("report is %+v, want 1 feed found and none failed", report)
+	}
+	if report.JobsOpen != 2 || report.OpenedToday != 2 || report.ClosedToday != 0 {
+		t.Fatalf("report is %+v, want 2 open, 2 opened and none closed", report)
+	}
+	if got := count(t, conn, "SELECT count(*) FROM jobs"); got != 2 {
+		t.Fatalf("jobs in database: %d, want 2", got)
+	}
+	if got := count(t, conn, "SELECT count(*) FROM jobs WHERE first_seen_at IS NOT NULL AND last_seen_at IS NOT NULL"); got != 2 {
+		t.Fatalf("jobs with seen timestamps: %d, want 2", got)
+	}
+	if got := count(t, conn, "SELECT count(*) FROM job_places"); got != 2 {
+		t.Fatalf("job places: %d, want 2", got)
+	}
+	assertJobLocations(t, conn, "job-a", []int64{2})
+	assertJobLocations(t, conn, "job-b", []int64{1})
+}
+
+func TestRunKeepsFirstSeenAt(t *testing.T) {
+	db, conn := testDatabase(t)
+	geocoder := &fakeGeocoder{}
+	feed := jobsFeed(jobItem{guid: "job-a", title: "Engineer", city: "TURKU", country: "Finland"})
+	site := newFeedSite(t, feed)
+	rows := companyRows(site.server.URL)
+	csv := careersURLRow(t, site)
+
+	firstRun := time.Date(2026, 11, 26, 3, 0, 0, 0, time.UTC)
+	secondRun := firstRun.Add(24 * time.Hour)
+	deps := testDepsWithTeamtailor(t, db, geocoder, rows, csv, localTeamtailor())
+	deps.Now = firstRun
+
+	if _, err := Run(context.Background(), deps); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	firstSeen := jobTime(t, conn, "job-a", "first_seen_at")
+
+	deps.Now = secondRun
+	report, err := Run(context.Background(), deps)
+	if err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+	if report.JobsOpen != 1 || report.OpenedToday != 0 || report.ClosedToday != 0 {
+		t.Fatalf("report is %+v, want 1 open and nothing opened or closed", report)
+	}
+	if got := count(t, conn, "SELECT count(*) FROM jobs"); got != 1 {
+		t.Fatalf("jobs in database: %d, want 1", got)
+	}
+	if got := jobTime(t, conn, "job-a", "first_seen_at"); !got.Equal(firstSeen) {
+		t.Errorf("first_seen_at moved from %v to %v", firstSeen, got)
+	}
+	if got := jobTime(t, conn, "job-a", "last_seen_at"); !got.Equal(secondRun) {
+		t.Errorf("last_seen_at is %v, want %v", got, secondRun)
+	}
+}
+
+func TestRunClosesVanishedJob(t *testing.T) {
+	db, conn := testDatabase(t)
+	geocoder := &fakeGeocoder{}
+	withBoth := jobsFeed(
+		jobItem{guid: "job-a", title: "Engineer", city: "TURKU", country: "Finland"},
+		jobItem{guid: "job-b", title: "Designer", city: "HELSINKI", country: "Finland"},
+	)
+	site := newFeedSite(t, withBoth)
+	rows := companyRows(site.server.URL)
+	csv := careersURLRow(t, site)
+
+	firstRun := time.Date(2026, 11, 26, 3, 0, 0, 0, time.UTC)
+	deps := testDepsWithTeamtailor(t, db, geocoder, rows, csv, localTeamtailor())
+	deps.Now = firstRun
+
+	if _, err := Run(context.Background(), deps); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	firstSeen := jobTime(t, conn, "job-b", "first_seen_at")
+
+	site.setFeed(jobsFeed(jobItem{guid: "job-a", title: "Engineer", city: "TURKU", country: "Finland"}))
+	deps.Now = firstRun.Add(24 * time.Hour)
+	report, err := Run(context.Background(), deps)
+	if err != nil {
+		t.Fatalf("run without job-b: %v", err)
+	}
+	if report.ClosedToday != 1 {
+		t.Fatalf("closed today: %d, want 1", report.ClosedToday)
+	}
+	if !jobClosed(t, conn, "job-b") {
+		t.Error("job-b is still open")
+	}
+	if jobClosed(t, conn, "job-a") {
+		t.Error("job-a was closed")
+	}
+
+	site.setFeed(withBoth)
+	deps.Now = firstRun.Add(48 * time.Hour)
+	report, err = Run(context.Background(), deps)
+	if err != nil {
+		t.Fatalf("run with job-b restored: %v", err)
+	}
+	if report.ClosedToday != 0 || report.OpenedToday != 0 {
+		t.Fatalf("report is %+v, want nothing opened or closed", report)
+	}
+	if jobClosed(t, conn, "job-b") {
+		t.Error("job-b was not reopened")
+	}
+	if got := jobTime(t, conn, "job-b", "first_seen_at"); !got.Equal(firstSeen) {
+		t.Errorf("first_seen_at moved from %v to %v", firstSeen, got)
+	}
+}
+
+func TestRunEmptyFeedClosesAll(t *testing.T) {
+	db, conn := testDatabase(t)
+	geocoder := &fakeGeocoder{}
+	site := newFeedSite(t, jobsFeed(
+		jobItem{guid: "job-a", title: "Engineer", city: "TURKU", country: "Finland"},
+		jobItem{guid: "job-b", title: "Designer", city: "HELSINKI", country: "Finland"},
+	))
+	rows := companyRows(site.server.URL)
+	csv := careersURLRow(t, site)
+
+	firstRun := time.Date(2026, 11, 26, 3, 0, 0, 0, time.UTC)
+	deps := testDepsWithTeamtailor(t, db, geocoder, rows, csv, localTeamtailor())
+	deps.Now = firstRun
+
+	if _, err := Run(context.Background(), deps); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+
+	site.setFeed(jobsFeed())
+	deps.Now = firstRun.Add(24 * time.Hour)
+	report, err := Run(context.Background(), deps)
+	if err != nil {
+		t.Fatalf("empty feed run: %v", err)
+	}
+	if report.JobsOpen != 0 || report.ClosedToday != 2 {
+		t.Fatalf("report is %+v, want 2 closed", report)
+	}
+	if got := count(t, conn, "SELECT count(*) FROM jobs WHERE closed_at IS NULL"); got != 0 {
+		t.Errorf("open jobs: %d, want 0", got)
+	}
+}
+
+func TestRunFeedFailureChangesNothing(t *testing.T) {
+	db, conn := testDatabase(t)
+	geocoder := &fakeGeocoder{}
+	site := newFeedSite(t, jobsFeed(jobItem{guid: "job-a", title: "Engineer", city: "TURKU", country: "Finland"}))
+	rows := companyRows(site.server.URL)
+	csv := careersURLRow(t, site)
+
+	firstRun := time.Date(2026, 11, 26, 3, 0, 0, 0, time.UTC)
+	deps := testDepsWithTeamtailor(t, db, geocoder, rows, csv, localTeamtailor())
+	deps.Now = firstRun
+
+	if _, err := Run(context.Background(), deps); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	lastSeen := jobTime(t, conn, "job-a", "last_seen_at")
+
+	site.setStatus(http.StatusInternalServerError)
+	deps.Now = firstRun.Add(24 * time.Hour)
+	report, err := Run(context.Background(), deps)
+	if err != nil {
+		t.Fatalf("failing feed run: %v", err)
+	}
+	if report.FeedsFailed != 1 || report.ClosedToday != 0 {
+		t.Fatalf("report is %+v, want 1 failed feed and nothing closed", report)
+	}
+	if jobClosed(t, conn, "job-a") {
+		t.Error("a failing feed closed its jobs")
+	}
+	if got := jobTime(t, conn, "job-a", "last_seen_at"); !got.Equal(lastSeen) {
+		t.Errorf("last_seen_at moved from %v to %v", lastSeen, got)
+	}
+}
+
+func TestRunDiscoversFeedOnce(t *testing.T) {
+	db, conn := testDatabase(t)
+	geocoder := &fakeGeocoder{}
+	site := newFeedSite(t, jobsFeed(jobItem{guid: "job-a", title: "Engineer", city: "TURKU", country: "Finland"}))
+	rows := companyRows(site.server.URL)
+	csv := careersURLRow(t, site)
+
+	firstRun := time.Date(2026, 11, 26, 3, 0, 0, 0, time.UTC)
+	deps := testDepsWithTeamtailor(t, db, geocoder, rows, csv, localTeamtailor())
+	deps.Now = firstRun
+
+	report, err := Run(context.Background(), deps)
+	if err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	if report.FeedsFound != 1 {
+		t.Fatalf("first run found %d feeds, want 1", report.FeedsFound)
+	}
+
+	deps.Now = firstRun.Add(24 * time.Hour)
+	report, err = Run(context.Background(), deps)
+	if err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+	if report.FeedsFound != 0 {
+		t.Fatalf("second run found %d feeds, want 0", report.FeedsFound)
+	}
+	if got := site.careersRequests.Load(); got != 1 {
+		t.Fatalf("careers page fetched %d times, want 1", got)
+	}
+	if got := count(t, conn, "SELECT count(*) FROM jobs"); got != 1 {
+		t.Fatalf("jobs in database: %d, want 1", got)
+	}
+}
+
+func TestRunReassignsJobsAfterCityChange(t *testing.T) {
+	db, conn := testDatabase(t)
+	geocoder := &fakeGeocoder{}
+	site := newFeedSite(t, jobsFeed(jobItem{guid: "job-a", title: "Engineer", city: "TURKU", country: "Finland"}))
+	rows := companyRows(site.server.URL)
+	csv := careersURLRow(t, site)
+
+	firstRun := time.Date(2026, 11, 26, 3, 0, 0, 0, time.UTC)
+	deps := testDepsWithTeamtailor(t, db, geocoder, rows, csv, localTeamtailor())
+	deps.Now = firstRun
+
+	if _, err := Run(context.Background(), deps); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	assertJobLocations(t, conn, "job-a", []int64{2})
+
+	rows[1].City = "TAMPERE"
+	deps.Now = firstRun.Add(24 * time.Hour)
+	if _, err := Run(context.Background(), deps); err != nil {
+		t.Fatalf("run after city change: %v", err)
+	}
+	assertJobLocations(t, conn, "job-a", []int64{1})
+}
+
+type jobItem struct {
+	guid    string
+	title   string
+	city    string
+	country string
+	remote  string
+}
+
+func jobsFeed(items ...jobItem) string {
+	var builder strings.Builder
+	builder.WriteString(`<?xml version="1.0"?><rss version="2.0" xmlns:tt="https://teamtailor.com/locations"><channel>`)
+	for _, item := range items {
+		_, _ = fmt.Fprintf(&builder, `<item><title>%s</title><link>https://acme.example/jobs/%s</link><guid>%s</guid><pubDate>Tue, 24 Nov 2026 10:00:00 +0200</pubDate><remoteStatus>%s</remoteStatus><tt:locations><tt:location><tt:name>%s</tt:name><tt:city>%s</tt:city><tt:country>%s</tt:country></tt:location></tt:locations></item>`,
+			item.title, item.guid, item.guid, item.remote, item.city, item.city, item.country)
+	}
+	builder.WriteString(`</channel></rss>`)
+	return builder.String()
+}
+
+type feedSite struct {
+	server          *httptest.Server
+	mu              sync.Mutex
+	feed            string
+	status          int
+	careersRequests atomic.Int32
+}
+
+func newFeedSite(t *testing.T, feed string) *feedSite {
+	t.Helper()
+	site := &feedSite{feed: feed}
+	site.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/robots.txt":
+			_, _ = io.WriteString(w, "User-agent: *\nAllow: /\n")
+		case "/careers":
+			site.careersRequests.Add(1)
+			_, _ = io.WriteString(w, `<html><body><script src="https://teamtailor-cdn.com/app.js"></script></body></html>`)
+		case "/jobs.rss":
+			site.mu.Lock()
+			feed, status := site.feed, site.status
+			site.mu.Unlock()
+			if status != 0 && status != http.StatusOK {
+				w.WriteHeader(status)
+				return
+			}
+			_, _ = io.WriteString(w, feed)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(site.server.Close)
+	return site
+}
+
+func (s *feedSite) setFeed(feed string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.feed = feed
+}
+
+func (s *feedSite) setStatus(status int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.status = status
+}
+
+func companyRows(website string) []members.Row {
+	return []members.Row{
+		{
+			ID:             1,
+			Title:          "Acme Oy",
+			Type:           "päätoimipaikka",
+			StreetAddress1: "Testikatu 1",
+			PostalCode:     "00100",
+			City:           "HELSINKI",
+			WebsiteURL:     &website,
+		},
+		{
+			ID:             2,
+			Title:          "Acme Oy Turku",
+			Type:           "toimipaikka",
+			StreetAddress1: "Turkkatu 2",
+			PostalCode:     "20100",
+			City:           "TURKU",
+		},
+	}
+}
+
+func careersURLRow(t *testing.T, site *feedSite) string {
+	t.Helper()
+	return writeCareers(t, careersRow{id: 1, name: "Acme Oy", url: site.server.URL + "/careers"})
+}
+
+func assertJobLocations(t *testing.T, conn *pgx.Conn, guid string, want []int64) {
+	t.Helper()
+	rows, err := conn.Query(context.Background(), `
+SELECT jl.location_id
+FROM job_locations jl
+JOIN jobs j ON j.id = jl.job_id
+WHERE j.guid = $1
+ORDER BY jl.location_id`, guid)
+	if err != nil {
+		t.Fatalf("read locations for job %s: %v", guid, err)
+	}
+	defer rows.Close()
+
+	var got []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			t.Fatalf("read location for job %s: %v", guid, err)
+		}
+		got = append(got, id)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read locations for job %s: %v", guid, err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("job %s locations are %v, want %v", guid, got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("job %s locations are %v, want %v", guid, got, want)
+		}
+	}
+}
+
+func jobTime(t *testing.T, conn *pgx.Conn, guid, column string) time.Time {
+	t.Helper()
+	var value time.Time
+	if err := conn.QueryRow(context.Background(), "SELECT "+column+" FROM jobs WHERE guid = $1", guid).Scan(&value); err != nil {
+		t.Fatalf("read %s for job %s: %v", column, guid, err)
+	}
+	return value
+}
+
+func jobClosed(t *testing.T, conn *pgx.Conn, guid string) bool {
+	t.Helper()
+	var closedAt *time.Time
+	if err := conn.QueryRow(context.Background(), "SELECT closed_at FROM jobs WHERE guid = $1", guid).Scan(&closedAt); err != nil {
+		t.Fatalf("read closed_at for job %s: %v", guid, err)
+	}
+	return closedAt != nil
+}
+
 func testDeps(t *testing.T, db *store.Store, geocoder Geocoder, rows []members.Row) Deps {
 	t.Helper()
 	return testDepsWithCareers(t, db, geocoder, rows, writeCareers(t), offlineCareers())
@@ -362,6 +760,23 @@ func testDepsWithCareers(t *testing.T, db *store.Store, geocoder Geocoder, rows 
 		Geocoder:    geocoder,
 		Careers:     careersClient,
 		CareersPath: careersPath,
+		Teamtailor:  offlineTeamtailor(),
+		Now:         time.Now(),
+		Log:         slog.New(slog.DiscardHandler),
+	}
+}
+
+func testDepsWithTeamtailor(t *testing.T, db *store.Store, geocoder Geocoder, rows []members.Row, careersPath string, teamtailorClient *teamtailor.Client) Deps {
+	t.Helper()
+	return Deps{
+		Store: db,
+		Fetch: func(context.Context) ([]members.Row, error) {
+			return rows, nil
+		},
+		Geocoder:    geocoder,
+		Careers:     offlineCareers(),
+		CareersPath: careersPath,
+		Teamtailor:  teamtailorClient,
 		Now:         time.Now(),
 		Log:         slog.New(slog.DiscardHandler),
 	}
@@ -369,6 +784,14 @@ func testDepsWithCareers(t *testing.T, db *store.Store, geocoder Geocoder, rows 
 
 func offlineCareers() *careers.Client {
 	return &careers.Client{HTTP: &http.Client{Transport: offlineTransport{}}}
+}
+
+func offlineTeamtailor() *teamtailor.Client {
+	return &teamtailor.Client{HTTP: &http.Client{Transport: offlineTransport{}}}
+}
+
+func localTeamtailor() *teamtailor.Client {
+	return &teamtailor.Client{HTTP: useragent.Client(0)}
 }
 
 type offlineTransport struct{}
