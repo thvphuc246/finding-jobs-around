@@ -873,6 +873,14 @@ func testDatabase(t *testing.T) (*store.Store, *pgx.Conn) {
 	}
 	ctx := context.Background()
 
+	conn, err := pgx.Connect(ctx, url)
+	if err != nil {
+		t.Fatalf("connect database: %v", err)
+	}
+	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock(873421)"); err != nil {
+		t.Fatalf("lock test database: %v", err)
+	}
+
 	db, err := store.Connect(ctx, url)
 	if err != nil {
 		t.Fatalf("connect store: %v", err)
@@ -881,17 +889,13 @@ func testDatabase(t *testing.T) (*store.Store, *pgx.Conn) {
 		t.Fatalf("init schema: %v", err)
 	}
 
-	conn, err := pgx.Connect(ctx, url)
-	if err != nil {
-		t.Fatalf("connect database: %v", err)
-	}
 	if _, err := conn.Exec(ctx, "TRUNCATE companies, locations RESTART IDENTITY CASCADE"); err != nil {
 		t.Fatalf("truncate tables: %v", err)
 	}
 
 	t.Cleanup(func() {
-		_ = conn.Close(context.Background())
 		db.Close()
+		_ = conn.Close(context.Background())
 	})
 	return db, conn
 }
