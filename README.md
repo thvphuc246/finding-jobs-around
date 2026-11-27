@@ -49,3 +49,32 @@ bun run typecheck
 bun test
 bun run build
 ```
+
+
+## Deployment
+
+Two Vercel projects are used from this repo:
+
+| Project | Root directory | Purpose |
+|---|---|---|
+| `finding-jobs-around-api` | `/` | serves `cmd/api` |
+| `finding-jobs-around` | `web/` | serves the map site and forwards `/api/*` |
+
+### Environment values
+
+| Value | Vercel API project | Vercel site project | GitHub Actions | Local `.env` |
+|---|---|---|---|---|
+| `DATABASE_URL` | pooled (from Neon integration) | none | secret, unpooled | local Docker DB |
+| `DIGITRANSIT_API_KEY` | none | none | secret | yes |
+| `SYNC_ENABLED` | none | none | variable `true` | none |
+
+### Run Sync by hand
+
+```sh
+gh workflow run sync.yml
+```
+
+### Rollback
+
+- Vercel: open the project deployment history and run an instant rollback to the previous good deployment.
+- Sync data: disable scheduled runs with `gh variable set SYNC_ENABLED --body false`, fix the issue, then re-enable and run Sync again.
