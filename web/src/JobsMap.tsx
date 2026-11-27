@@ -1,4 +1,5 @@
-import type { FilterSpecification, GeoJSONSource } from 'maplibre-gl'
+import { type FilterSpecification, type GeoJSONSource, setWorkerUrl } from 'maplibre-gl'
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import MapView, {
   AttributionControl,
@@ -15,6 +16,8 @@ import { boundsOf, STATUS, toFeatureCollection } from './geo'
 import LocationPopup from './LocationPopup'
 import type { Location } from './types'
 import { loadView, saveView } from './view'
+
+setWorkerUrl(maplibreWorkerUrl)
 
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
 
